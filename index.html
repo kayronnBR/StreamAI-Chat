@@ -1,22 +1,69 @@
-<script>
-        // Variável única
-        let GEMINI_API_KEY = localStorage.getItem('GEMINI_API_KEY') || "";
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chat IA para Streamers</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap');
+        
+        body, html { margin: 0; padding: 0; height: 100%; background-color: #18181B; color: #EFEFF1; font-family: 'Inter', sans-serif; overflow: hidden; }
+        
+        #chat-container { display: flex; flex-direction: column; height: 100%; width: 350px; border-right: 1px solid #2f2f35; }
+        #chat-messages { flex: 1; padding: 10px; display: flex; flex-direction: column; justify-content: flex-end; overflow-y: auto; }
+        
+        .message { margin-bottom: 8px; animation: fadeIn 0.3s; word-wrap: break-word; }
+        .username { font-weight: 600; margin-right: 5px; }
+        
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        
+        #config-modal {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.95); display: flex; align-items: center; justify-content: center; z-index: 100;
+        }
+        .modal-content { background: #26262c; padding: 25px; border-radius: 8px; width: 320px; text-align: center; }
+        input { width: 90%; padding: 10px; margin: 15px 0; border-radius: 4px; border: none; background: #18181B; color: white; }
+        button { width: 100%; padding: 10px; background: #9146FF; color: white; border: none; cursor: pointer; border-radius: 4px; font-weight: bold; }
+        button:hover { background: #772CE8; }
+        a { color: #BF94FF; text-decoration: none; }
+    </style>
+</head>
+<body>
+
+    <div id="config-modal">
+        <div class="modal-content">
+            <h3>Configurar IA</h3>
+            <p style="font-size: 13px; color: #adadb8;">Obtenha sua chave gratuita em: <br> <a href="https://aistudio.google.com/" target="_blank">Google AI Studio</a></p>
+            <input type="password" id="api-input" placeholder="Cole sua API Key aqui...">
+            <button onclick="salvarAPI()">Salvar e Iniciar</button>
+        </div>
+    </div>
+
+    <div id="chat-container">
+        <div id="chat-messages"></div>
+        <div style="background: #0E0E10; padding: 10px;">
+            <div id="status" style="font-size: 12px; margin-bottom: 5px; color: #adadb8;">Aguardando...</div>
+            <button id="btn-start" onclick="iniciarEscuta()">Iniciar Escuta</button>
+        </div>
+    </div>
+
+    <script>
+        // Carrega a chave do cache
+        let GEMINI_API_KEY = localStorage.getItem('GEMINI_API_KEY');
         const modal = document.getElementById('config-modal');
         const statusText = document.getElementById('status');
         const chatMessages = document.getElementById('chat-messages');
 
-        // Se já tiver chave, fecha o modal
-        if (GEMINI_API_KEY) {
-            modal.style.display = 'none';
-        }
+        // Se já houver chave salva, remove o modal
+        if (GEMINI_API_KEY) modal.style.display = 'none';
 
         function salvarAPI() {
-            const key = document.getElementById('api-input').value;
+            const key = document.getElementById('api-input').value.trim();
             if (key) {
                 localStorage.setItem('GEMINI_API_KEY', key);
                 location.reload();
             } else {
-                alert("Por favor, cole sua chave!");
+                alert("Cole uma chave válida!");
             }
         }
 
@@ -48,6 +95,7 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ contents: [{ parts: [{ text: `Reaja a: "${texto}". Responda com 1 ou 2 frases curtas, estilo chat de Twitch. Formato: msg1 | msg2` }] }] })
                 });
+                
                 const data = await res.json();
                 const resposta = data.candidates[0].content.parts[0].text;
                 const mensagens = resposta.split('|');
@@ -55,12 +103,17 @@
                 mensagens.forEach(m => {
                     const div = document.createElement('div');
                     div.className = 'message';
-                    div.innerHTML = `<span class="username" style="color: #FF7F50">Espectador:</span> ${m.trim()}`;
+                    const cores = ['#FF7F50', '#00FF7F', '#1E90FF', '#FF69B4'];
+                    const corAleatoria = cores[Math.floor(Math.random() * cores.length)];
+                    div.innerHTML = `<span class="username" style="color: ${corAleatoria}">Espectador:</span> ${m.trim()}`;
                     chatMessages.appendChild(div);
                     chatMessages.scrollTop = chatMessages.scrollHeight;
                 });
             } catch (err) {
                 console.error("Erro na API:", err);
+                statusText.innerText = "Erro na API. Verifique a chave.";
             }
         }
     </script>
+</body>
+</html>

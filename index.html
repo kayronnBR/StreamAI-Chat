@@ -7,58 +7,22 @@
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap');
         *, *::before, *::after { box-sizing: border-box; }
-
-        body, html {
-            margin: 0; padding: 0; height: 100%;
-            background-color: #18181B; color: #EFEFF1;
-            font-family: 'Inter', sans-serif; overflow: hidden;
-        }
-
-        #chat-container {
-            display: flex; flex-direction: column;
-            height: 100vh; width: 350px;
-            border-right: 1px solid #2f2f35;
-        }
-
-        #chat-header {
-            background: #0E0E10; padding: 10px 12px;
-            border-bottom: 1px solid #2f2f35;
-            display: flex; align-items: center; gap: 8px;
-        }
-        #chat-header .dot {
-            width: 8px; height: 8px; border-radius: 50%;
-            background: #9146FF; flex-shrink: 0;
-        }
-        #chat-header .dot.ativo { background: #ff4d4d; animation: pulse 1s infinite; }
+        body, html { margin: 0; padding: 0; height: 100%; background-color: #18181B; color: #EFEFF1; font-family: 'Inter', sans-serif; overflow: hidden; }
+        #chat-container { display: flex; flex-direction: column; height: 100vh; width: 350px; border-right: 1px solid #2f2f35; }
+        #chat-header { background: #0E0E10; padding: 10px 12px; border-bottom: 1px solid #2f2f35; display: flex; align-items: center; gap: 8px; }
+        .dot { width: 8px; height: 8px; border-radius: 50%; background: #9146FF; }
+        .dot.ativo { background: #ff4d4d; animation: pulse 1s infinite; }
         @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
-
-        #chat-messages {
-            flex: 1; padding: 10px 12px;
-            display: flex; flex-direction: column;
-            justify-content: flex-end; overflow-y: auto; gap: 4px;
-        }
+        #chat-messages { flex: 1; padding: 10px 12px; display: flex; flex-direction: column; justify-content: flex-end; overflow-y: auto; gap: 4px; }
         .message { animation: fadeIn 0.3s; word-wrap: break-word; font-size: 14px; line-height: 1.4; }
         .username { font-weight: 600; margin-right: 4px; }
-        .message.loading { opacity: 0.5; font-style: italic; font-size: 12px; color: #adadb8; }
-        @keyframes fadeIn { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
-
         #chat-footer { background: #0E0E10; padding: 10px 12px; border-top: 1px solid #2f2f35; }
         #status { font-size: 11px; margin-bottom: 8px; color: #adadb8; }
-
-        #btn-start {
-            width: 100%; padding: 10px; background: #9146FF; color: white;
-            border: none; cursor: pointer; border-radius: 4px;
-            font-weight: bold; font-size: 13px;
-        }
+        #btn-start { width: 100%; padding: 10px; background: #9146FF; color: white; border: none; cursor: pointer; border-radius: 4px; font-weight: bold; }
         #btn-start.parar { background: #EB0400; }
-        
-        #config-modal {
-            position: fixed; inset: 0; background: rgba(0,0,0,0.95);
-            display: flex; align-items: center; justify-content: center; z-index: 100;
-        }
+        #config-modal { position: fixed; inset: 0; background: rgba(0,0,0,0.95); display: flex; align-items: center; justify-content: center; z-index: 100; }
         .modal-content { background: #26262c; padding: 25px; border-radius: 8px; width: 320px; text-align: center; }
-        .modal-content input { width: 100%; padding: 10px; margin-bottom: 12px; border-radius: 4px; border: 1px solid #3a3a45; background: #18181B; color: white; }
-        .modal-content button { width: 100%; padding: 10px; background: #9146FF; color: white; border: none; cursor: pointer; }
+        input { width: 100%; padding: 10px; margin-bottom: 12px; border-radius: 4px; border: 1px solid #3a3a45; background: #18181B; color: white; }
     </style>
 </head>
 <body>
@@ -66,16 +30,13 @@
 <div id="config-modal">
     <div class="modal-content">
         <h3>Configurar IA</h3>
-        <input type="password" id="api-input" placeholder="Cole sua API Key do Gemini...">
+        <input type="password" id="api-input" placeholder="Cole sua API Key...">
         <button onclick="salvarAPI()">Salvar e Iniciar</button>
     </div>
 </div>
 
 <div id="chat-container">
-    <div id="chat-header">
-        <div class="dot" id="dot"></div>
-        <span>Chat IA – Streamer</span>
-    </div>
+    <div id="chat-header"><div class="dot" id="dot"></div><span>Chat IA – Streamer</span></div>
     <div id="chat-messages"></div>
     <div id="chat-footer">
         <div id="status">Aguardando...</div>
@@ -86,14 +47,11 @@
 <script>
     let GEMINI_API_KEY = localStorage.getItem('GEMINI_API_KEY');
     let escutando = false;
-
-    // Configuração da API de Voz
+    
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     const recognition = new SpeechRecognition();
     recognition.lang = 'pt-BR';
     recognition.continuous = true;
-    recognition.onstart = () => console.log("Reconhecimento iniciado!");
-    recognition.onerror = (event) => console.error("Erro de voz:", event.error);
     recognition.interimResults = false;
 
     const chatMsgs = document.getElementById('chat-messages');
@@ -111,57 +69,53 @@
     function toggleEscuta() {
         if (!GEMINI_API_KEY) return;
         if (escutando) {
-            recognition.stop();
             escutando = false;
-            dot.classList.remove('ativo');
+            recognition.stop();
             btnStart.textContent = '▶ Iniciar Escuta';
             btnStart.classList.remove('parar');
-            statusText.innerText = 'Parado.';
+            dot.classList.remove('ativo');
         } else {
-            recognition.start();
             escutando = true;
-            dot.classList.add('ativo');
+            recognition.start();
             btnStart.textContent = '■ Parar Escuta';
             btnStart.classList.add('parar');
-            statusText.innerText = '🎙️ Escutando...';
+            dot.classList.add('ativo');
         }
     }
 
+    // Reinício automático no Linux/Edge caso a conexão caia
+    recognition.onend = () => {
+        if (escutando) {
+            try { recognition.start(); } catch(e) { console.log("Reiniciando..."); }
+        }
+    };
+
+    recognition.onerror = (event) => {
+        statusText.innerText = 'Erro: ' + event.error + '. Tentando reconectar...';
+    };
+
     recognition.onresult = async (event) => {
         const texto = event.results[event.results.length - 1][0].transcript;
-        adicionarMensagem('Streamer', texto, '#adadb8');
-        const loading = adicionarMensagem('IA', 'Pensando...', '#9146FF', true);
-
+        adicionarMensagem('Você', texto, '#adadb8');
+        
         try {
             const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    contents: [{ parts: [{ text: `O streamer disse: "${texto}". Reaja com 1 ou 2 mensagens curtas de chat da Twitch. Formato: msg1 | msg2` }] }]
-                })
+                body: JSON.stringify({ contents: [{ parts: [{ text: `O streamer disse: "${texto}". Reaja com 1 mensagem curta de chat. Formato: mensagem` }] }] })
             });
             const data = await res.json();
-            loading.remove();
             const resposta = data.candidates[0].content.parts[0].text;
-            resposta.split('|').forEach(m => adicionarMensagem('Viewer', m.trim(), gerarCor()));
-        } catch (e) {
-            loading.remove();
-            statusText.innerText = 'Erro na API';
-        }
+            adicionarMensagem('Espectador', resposta, '#9146FF');
+        } catch (e) { statusText.innerText = 'Erro na API'; }
     };
 
-    function adicionarMensagem(user, text, color, isLoading = false) {
+    function adicionarMensagem(user, text, color) {
         const div = document.createElement('div');
-        div.className = 'message' + (isLoading ? ' loading' : '');
+        div.className = 'message';
         div.innerHTML = `<span class="username" style="color:${color}">${user}:</span> ${text}`;
         chatMsgs.appendChild(div);
         chatMsgs.scrollTop = chatMsgs.scrollHeight;
-        return div;
-    }
-
-    function gerarCor() {
-        const cores = ['#FF7F50', '#00B5AD', '#56CCF2', '#43E97B'];
-        return cores[Math.floor(Math.random() * cores.length)];
     }
 </script>
 </body>

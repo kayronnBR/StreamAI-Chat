@@ -2,120 +2,102 @@
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Chat IA para Streamers</title>
+    <title>Chat IA (OpenAI) para Streamers</title>
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap');
-        *, *::before, *::after { box-sizing: border-box; }
-        body, html { margin: 0; padding: 0; height: 100%; background-color: #18181B; color: #EFEFF1; font-family: 'Inter', sans-serif; overflow: hidden; }
-        #chat-container { display: flex; flex-direction: column; height: 100vh; width: 350px; border-right: 1px solid #2f2f35; }
-        #chat-header { background: #0E0E10; padding: 10px 12px; border-bottom: 1px solid #2f2f35; display: flex; align-items: center; gap: 8px; }
-        .dot { width: 8px; height: 8px; border-radius: 50%; background: #9146FF; }
-        .dot.ativo { background: #ff4d4d; animation: pulse 1s infinite; }
-        @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
-        #chat-messages { flex: 1; padding: 10px 12px; display: flex; flex-direction: column; justify-content: flex-end; overflow-y: auto; gap: 4px; }
-        .message { animation: fadeIn 0.3s; word-wrap: break-word; font-size: 14px; line-height: 1.4; }
-        .username { font-weight: 600; margin-right: 4px; }
-        #chat-footer { background: #0E0E10; padding: 10px 12px; border-top: 1px solid #2f2f35; }
-        #status { font-size: 11px; margin-bottom: 8px; color: #adadb8; }
-        #btn-start { width: 100%; padding: 10px; background: #9146FF; color: white; border: none; cursor: pointer; border-radius: 4px; font-weight: bold; }
-        #btn-start.parar { background: #EB0400; }
-        #config-modal { position: fixed; inset: 0; background: rgba(0,0,0,0.95); display: flex; align-items: center; justify-content: center; z-index: 100; }
-        .modal-content { background: #26262c; padding: 25px; border-radius: 8px; width: 320px; text-align: center; }
-        input { width: 100%; padding: 10px; margin-bottom: 12px; border-radius: 4px; border: 1px solid #3a3a45; background: #18181B; color: white; }
+        body { background-color: #18181B; color: #EFEFF1; font-family: sans-serif; margin: 0; display: flex; flex-direction: column; height: 100vh; }
+        #chat-messages { flex: 1; padding: 15px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; }
+        #chat-footer { background: #0E0E10; padding: 15px; border-top: 1px solid #2f2f35; }
+        .message { font-size: 14px; }
+        .username { font-weight: bold; margin-right: 5px; }
+        button { width: 100%; padding: 12px; background: #9146FF; color: white; border: none; cursor: pointer; border-radius: 4px; }
+        input { width: 100%; padding: 10px; margin-bottom: 10px; border-radius: 4px; background: #26262c; color: white; border: 1px solid #3a3a45; }
     </style>
 </head>
 <body>
 
-<div id="config-modal">
-    <div class="modal-content">
-        <h3>Configurar IA</h3>
-        <input type="password" id="api-input" placeholder="Cole sua API Key...">
+<div id="config-modal" style="position: fixed; inset: 0; background: rgba(0,0,0,0.9); display: flex; align-items: center; justify-content: center; z-index: 100;">
+    <div style="background: #26262c; padding: 25px; border-radius: 8px; width: 300px; text-align: center;">
+        <h3>Configurar OpenAI</h3>
+        <input type="password" id="api-input" placeholder="Cole sua API Key (sk-...)">
         <button onclick="salvarAPI()">Salvar e Iniciar</button>
     </div>
 </div>
 
-<div id="chat-container">
-    <div id="chat-header"><div class="dot" id="dot"></div><span>Chat IA – Streamer</span></div>
-    <div id="chat-messages"></div>
-    <div id="chat-footer">
-        <div id="status">Aguardando...</div>
-        <button id="btn-start" onclick="toggleEscuta()">▶ Iniciar Escuta</button>
-    </div>
+<div id="chat-messages"></div>
+<div id="chat-footer">
+    <div id="status" style="font-size: 12px; color: #adadb8; margin-bottom: 5px;">Aguardando...</div>
+    <button id="btn-start" onclick="toggleEscuta()">▶ Iniciar Escuta</button>
 </div>
 
 <script>
-    let GEMINI_API_KEY = localStorage.getItem('GEMINI_API_KEY');
+    let API_KEY = localStorage.getItem('OPENAI_API_KEY');
     let escutando = false;
-    
+
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     const recognition = new SpeechRecognition();
     recognition.lang = 'pt-BR';
     recognition.continuous = true;
-    recognition.interimResults = false;
 
-    const chatMsgs = document.getElementById('chat-messages');
     const statusText = document.getElementById('status');
-    const btnStart = document.getElementById('btn-start');
-    const dot = document.getElementById('dot');
 
-    if (GEMINI_API_KEY) document.getElementById('config-modal').style.display = 'none';
+    if (API_KEY) document.getElementById('config-modal').style.display = 'none';
 
     function salvarAPI() {
         const key = document.getElementById('api-input').value.trim();
-        if (key) { localStorage.setItem('GEMINI_API_KEY', key); location.reload(); }
+        if (key) { localStorage.setItem('OPENAI_API_KEY', key); location.reload(); }
     }
 
     function toggleEscuta() {
-        if (!GEMINI_API_KEY) return;
+        if (!API_KEY) return;
         if (escutando) {
             escutando = false;
             recognition.stop();
-            btnStart.textContent = '▶ Iniciar Escuta';
-            btnStart.classList.remove('parar');
-            dot.classList.remove('ativo');
+            document.getElementById('btn-start').textContent = '▶ Iniciar Escuta';
         } else {
             escutando = true;
             recognition.start();
-            btnStart.textContent = '■ Parar Escuta';
-            btnStart.classList.add('parar');
-            dot.classList.add('ativo');
+            document.getElementById('btn-start').textContent = '■ Parar Escuta';
+            statusText.innerText = '🎙️ Escutando...';
         }
     }
 
-    // Reinício automático no Linux/Edge caso a conexão caia
-    recognition.onend = () => {
-        if (escutando) {
-            try { recognition.start(); } catch(e) { console.log("Reiniciando..."); }
-        }
-    };
-
-    recognition.onerror = (event) => {
-        statusText.innerText = 'Erro: ' + event.error + '. Tentando reconectar...';
-    };
+    recognition.onend = () => { if (escutando) recognition.start(); };
 
     recognition.onresult = async (event) => {
         const texto = event.results[event.results.length - 1][0].transcript;
         adicionarMensagem('Você', texto, '#adadb8');
         
         try {
-            const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`, {
+            statusText.innerText = 'IA pensando...';
+            const res = await fetch(`https://api.openai.com/v1/chat/completions`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ contents: [{ parts: [{ text: `O streamer disse: "${texto}". Reaja com 1 mensagem curta de chat. Formato: mensagem` }] }] })
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${API_KEY}`
+                },
+                body: JSON.stringify({
+                    model: "gpt-3.5-turbo",
+                    messages: [{ role: "user", content: `O streamer disse: "${texto}". Reaja com 1 mensagem curta estilo Twitch.` }]
+                })
             });
+
             const data = await res.json();
-            const resposta = data.candidates[0].content.parts[0].text;
-            adicionarMensagem('Espectador', resposta, '#9146FF');
-        } catch (e) { statusText.innerText = 'Erro na API'; }
+            if (data.error) throw new Error(data.error.message);
+            
+            const resposta = data.choices[0].message.content;
+            adicionarMensagem('Chat', resposta, '#9146FF');
+            statusText.innerText = '🎙️ Escutando...';
+        } catch (e) {
+            console.error("Erro OpenAI:", e);
+            statusText.innerText = 'Erro: ' + e.message;
+        }
     };
 
     function adicionarMensagem(user, text, color) {
         const div = document.createElement('div');
         div.className = 'message';
         div.innerHTML = `<span class="username" style="color:${color}">${user}:</span> ${text}`;
-        chatMsgs.appendChild(div);
-        chatMsgs.scrollTop = chatMsgs.scrollHeight;
+        document.getElementById('chat-messages').appendChild(div);
     }
 </script>
 </body>

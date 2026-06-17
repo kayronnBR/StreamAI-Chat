@@ -28,11 +28,9 @@
         #chat-header .dot {
             width: 8px; height: 8px; border-radius: 50%;
             background: #9146FF; flex-shrink: 0;
-            transition: background 0.3s;
         }
         #chat-header .dot.ativo { background: #ff4d4d; animation: pulse 1s infinite; }
         @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
-        #chat-header span { font-size: 13px; font-weight: 600; }
 
         #chat-messages {
             flex: 1; padding: 10px 12px;
@@ -45,52 +43,22 @@
         @keyframes fadeIn { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
 
         #chat-footer { background: #0E0E10; padding: 10px 12px; border-top: 1px solid #2f2f35; }
-        #status { font-size: 11px; margin-bottom: 8px; color: #adadb8; min-height: 16px; }
+        #status { font-size: 11px; margin-bottom: 8px; color: #adadb8; }
 
         #btn-start {
             width: 100%; padding: 10px; background: #9146FF; color: white;
             border: none; cursor: pointer; border-radius: 4px;
-            font-weight: bold; font-size: 13px; transition: background 0.2s;
+            font-weight: bold; font-size: 13px;
         }
-        #btn-start:hover { background: #772CE8; }
         #btn-start.parar { background: #EB0400; }
-        #btn-start.parar:hover { background: #b50300; }
-        #btn-start:disabled { background: #3a3a45; cursor: not-allowed; color: #adadb8; }
-
-        /* Volume meter */
-        #volume-bar-wrap {
-            height: 4px; background: #2f2f35; border-radius: 2px;
-            margin-bottom: 8px; overflow: hidden; display: none;
-        }
-        #volume-bar { height: 100%; width: 0%; background: #9146FF; transition: width 0.1s; }
-        #volume-bar-wrap.ativo { display: block; }
-
+        
         #config-modal {
             position: fixed; inset: 0; background: rgba(0,0,0,0.95);
             display: flex; align-items: center; justify-content: center; z-index: 100;
         }
-        .modal-content {
-            background: #26262c; padding: 25px;
-            border-radius: 8px; width: 320px; text-align: center;
-        }
-        .modal-content h3 { margin: 0 0 8px; font-size: 16px; }
-        .modal-content p  { margin: 0 0 12px; font-size: 13px; color: #adadb8; }
-        .modal-content input {
-            width: 100%; padding: 10px; margin-bottom: 12px;
-            border-radius: 4px; border: 1px solid #3a3a45;
-            background: #18181B; color: white; font-size: 14px;
-        }
-        .modal-content button {
-            width: 100%; padding: 10px; background: #9146FF; color: white;
-            border: none; cursor: pointer; border-radius: 4px;
-            font-weight: bold; font-size: 14px; transition: background 0.2s;
-        }
-        .modal-content button:hover { background: #772CE8; }
-        a { color: #BF94FF; text-decoration: none; }
-
-        #chat-messages::-webkit-scrollbar { width: 4px; }
-        #chat-messages::-webkit-scrollbar-track { background: transparent; }
-        #chat-messages::-webkit-scrollbar-thumb { background: #3a3a45; border-radius: 2px; }
+        .modal-content { background: #26262c; padding: 25px; border-radius: 8px; width: 320px; text-align: center; }
+        .modal-content input { width: 100%; padding: 10px; margin-bottom: 12px; border-radius: 4px; border: 1px solid #3a3a45; background: #18181B; color: white; }
+        .modal-content button { width: 100%; padding: 10px; background: #9146FF; color: white; border: none; cursor: pointer; }
     </style>
 </head>
 <body>
@@ -98,10 +66,7 @@
 <div id="config-modal">
     <div class="modal-content">
         <h3>Configurar IA</h3>
-        <p>Obtenha sua chave gratuita em:<br>
-           <a href="https://aistudio.google.com/" target="_blank">Google AI Studio</a>
-        </p>
-        <input type="password" id="api-input" placeholder="Cole sua API Key aqui...">
+        <input type="password" id="api-input" placeholder="Cole sua API Key do Gemini...">
         <button onclick="salvarAPI()">Salvar e Iniciar</button>
     </div>
 </div>
@@ -114,250 +79,88 @@
     <div id="chat-messages"></div>
     <div id="chat-footer">
         <div id="status">Aguardando...</div>
-        <div id="volume-bar-wrap"><div id="volume-bar"></div></div>
         <button id="btn-start" onclick="toggleEscuta()">▶ Iniciar Escuta</button>
     </div>
 </div>
 
 <script>
-// ─── Estado ────────────────────────────────────────────────────
-let GEMINI_API_KEY = localStorage.getItem('GEMINI_API_KEY');
-let escutando      = false;
-let processando    = false;
-const MAX_MSGS     = 80;
+    let GEMINI_API_KEY = localStorage.getItem('GEMINI_API_KEY');
+    let escutando = false;
 
-// MediaRecorder
-let mediaStream    = null;
-let mediaRecorder  = null;
-let audioChunks    = [];
-let cicloTimer     = null;
+    // Configuração da API de Voz
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    const recognition = new SpeechRecognition();
+    recognition.lang = 'pt-BR';
+    recognition.continuous = true;
+    recognition.interimResults = false;
 
-// AudioContext para volume meter
-let audioCtx       = null;
-let analyser       = null;
-let volumeTimer    = null;
+    const chatMsgs = document.getElementById('chat-messages');
+    const statusText = document.getElementById('status');
+    const btnStart = document.getElementById('btn-start');
+    const dot = document.getElementById('dot');
 
-// ─── Elementos ─────────────────────────────────────────────────
-const modal       = document.getElementById('config-modal');
-const statusText  = document.getElementById('status');
-const chatMsgs    = document.getElementById('chat-messages');
-const btnStart    = document.getElementById('btn-start');
-const dot         = document.getElementById('dot');
-const volumeWrap  = document.getElementById('volume-bar-wrap');
-const volumeBar   = document.getElementById('volume-bar');
+    if (GEMINI_API_KEY) document.getElementById('config-modal').style.display = 'none';
 
-if (GEMINI_API_KEY) modal.style.display = 'none';
+    function salvarAPI() {
+        const key = document.getElementById('api-input').value.trim();
+        if (key) { localStorage.setItem('GEMINI_API_KEY', key); location.reload(); }
+    }
 
-function log(msg) { statusText.innerText = msg; console.log(msg); }
-
-// ─── Salvar API Key ────────────────────────────────────────────
-function salvarAPI() {
-    const key = document.getElementById('api-input').value.trim();
-    if (key) { localStorage.setItem('GEMINI_API_KEY', key); location.reload(); }
-}
-
-// ─── Volume meter ──────────────────────────────────────────────
-function iniciarVolumeMeter(stream) {
-    try {
-        audioCtx  = new AudioContext();
-        analyser  = audioCtx.createAnalyser();
-        analyser.fftSize = 256;
-        const src = audioCtx.createMediaStreamSource(stream);
-        src.connect(analyser);
-        const buf = new Uint8Array(analyser.frequencyBinCount);
-        volumeWrap.classList.add('ativo');
-        volumeTimer = setInterval(() => {
-            analyser.getByteFrequencyData(buf);
-            const avg = buf.reduce((a,b) => a+b, 0) / buf.length;
-            volumeBar.style.width = Math.min(100, avg * 2) + '%';
-            volumeBar.style.background = avg > 30 ? '#43E97B' : '#9146FF';
-        }, 80);
-    } catch(e) { /* volume meter é opcional */ }
-}
-
-function pararVolumeMeter() {
-    clearInterval(volumeTimer);
-    volumeWrap.classList.remove('ativo');
-    if (audioCtx) { audioCtx.close(); audioCtx = null; }
-}
-
-// ─── Gravar um ciclo de áudio (3 segundos) ────────────────────
-function gravarCiclo() {
-    if (!escutando || !mediaStream) return;
-
-    audioChunks = [];
-    const mimeType = getSupportedMime();
-    mediaRecorder = new MediaRecorder(mediaStream, { mimeType });
-
-    mediaRecorder.ondataavailable = e => {
-        if (e.data.size > 0) audioChunks.push(e.data);
-    };
-
-    mediaRecorder.onstop = async () => {
-        if (!escutando) return;
-        const blob = new Blob(audioChunks, { type: mimeType });
-        // Só processa se tiver áudio suficiente (> 3KB = provavelmente tem fala)
-        if (blob.size > 3000 && !processando) {
-            await processarAudio(blob, mimeType);
+    function toggleEscuta() {
+        if (!GEMINI_API_KEY) return;
+        if (escutando) {
+            recognition.stop();
+            escutando = false;
+            dot.classList.remove('ativo');
+            btnStart.textContent = '▶ Iniciar Escuta';
+            btnStart.classList.remove('parar');
+            statusText.innerText = 'Parado.';
+        } else {
+            recognition.start();
+            escutando = true;
+            dot.classList.add('ativo');
+            btnStart.textContent = '■ Parar Escuta';
+            btnStart.classList.add('parar');
+            statusText.innerText = '🎙️ Escutando...';
         }
-        // Próximo ciclo
-        if (escutando) cicloTimer = setTimeout(gravarCiclo, 200);
-    };
+    }
 
-    mediaRecorder.start();
-    // Para após 3 segundos → processa → começa próximo ciclo
-    cicloTimer = setTimeout(() => {
-        if (mediaRecorder && mediaRecorder.state === 'recording') {
-            mediaRecorder.stop();
-        }
-    }, 3000);
-}
+    recognition.onresult = async (event) => {
+        const texto = event.results[event.results.length - 1][0].transcript;
+        adicionarMensagem('Streamer', texto, '#adadb8');
+        const loading = adicionarMensagem('IA', 'Pensando...', '#9146FF', true);
 
-function getSupportedMime() {
-    const tipos = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus', 'audio/ogg'];
-    return tipos.find(t => MediaRecorder.isTypeSupported(t)) || 'audio/webm';
-}
-
-// ─── Enviar áudio para Gemini (transcrição + reação) ──────────
-async function processarAudio(blob, mimeType) {
-    processando = true;
-    log('🤖 Processando fala...');
-    const loadingMsg = adicionarMensagem('Sistema', 'IA pensando...', '#adadb8', true);
-
-    try {
-        // Converte blob → base64
-        const base64 = await blobParaBase64(blob);
-        // Extrai só o dado (remove "data:...;base64,")
-        const audioData = base64.split(',')[1];
-
-        // Gemini Flash aceita áudio diretamente
-        const res = await fetch(
-            `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`,
-            {
+        try {
+            const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    contents: [{
-                        parts: [
-                            {
-                                inline_data: {
-                                    mime_type: mimeType.split(';')[0], // ex: "audio/webm"
-                                    data: audioData
-                                }
-                            },
-                            {
-                                text: `Este é um trecho de áudio de uma live de streaming.
-Primeiro transcreva o que foi dito. Se não houver fala clara, responda apenas "SILENCIO".
-Se houver fala, reaja com 1 ou 2 mensagens curtas no estilo de chat de espectadores da Twitch, com emojis.
-Formato da resposta: msg1 | msg2
-Não inclua a transcrição na resposta final, apenas as mensagens de chat.`
-                            }
-                        ]
-                    }],
-                    generationConfig: { maxOutputTokens: 120, temperature: 1.1 }
+                    contents: [{ parts: [{ text: `O streamer disse: "${texto}". Reaja com 1 ou 2 mensagens curtas de chat da Twitch. Formato: msg1 | msg2` }] }]
                 })
-            }
-        );
-
-        const data = await res.json();
-        loadingMsg.remove();
-
-        if (data.error) {
-            log('⚠️ Erro API: ' + data.error.message);
-            return;
-        }
-
-        const resposta = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || '';
-
-        if (!resposta || resposta.toUpperCase().includes('SILENCIO') || resposta.length < 2) {
-            return; // sem fala detectada, não mostra nada
-        }
-
-        const mensagens = resposta.split('|').map(m => m.trim()).filter(m => m.length > 1);
-        const nomes = ['Streamer_Fan99', 'xX_Gamer_Xx', 'PogChamp42', 'CoolViewer', 'kkkBR', 'TwitchBro', 'lurker123', 'HypeMax'];
-
-        mensagens.forEach((m, i) => {
-            const nome = nomes[Math.floor(Math.random() * nomes.length)];
-            const cor  = gerarCor();
-            setTimeout(() => adicionarMensagem(nome, m, cor), i * 500);
-        });
-
-    } catch (err) {
-        loadingMsg.remove();
-        log('⚠️ Erro de conexão: ' + err.message);
-        console.error(err);
-    } finally {
-        processando = false;
-        if (escutando) log('🎙️ Escutando...');
-    }
-}
-
-function blobParaBase64(blob) {
-    return new Promise((res, rej) => {
-        const reader = new FileReader();
-        reader.onload  = () => res(reader.result);
-        reader.onerror = rej;
-        reader.readAsDataURL(blob);
-    });
-}
-
-// ─── Iniciar / Parar ───────────────────────────────────────────
-async function toggleEscuta() {
-    if (!GEMINI_API_KEY) { modal.style.display = 'flex'; return; }
-
-    if (escutando) {
-        // PARAR
-        escutando = false;
-        clearTimeout(cicloTimer);
-        if (mediaRecorder && mediaRecorder.state !== 'inactive') mediaRecorder.stop();
-        if (mediaStream) { mediaStream.getTracks().forEach(t => t.stop()); mediaStream = null; }
-        pararVolumeMeter();
-        dot.classList.remove('ativo');
-        btnStart.textContent = '▶ Iniciar Escuta';
-        btnStart.classList.remove('parar');
-        log('Parado.');
-    } else {
-        // INICIAR — pede permissão do microfone aqui
-        log('🔐 Solicitando microfone...');
-        btnStart.disabled = true;
-        try {
-            mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+            });
+            const data = await res.json();
+            loading.remove();
+            const resposta = data.candidates[0].content.parts[0].text;
+            resposta.split('|').forEach(m => adicionarMensagem('Viewer', m.trim(), gerarCor()));
         } catch (e) {
-            log('⚠️ Permissão negada: ' + e.message);
-            btnStart.disabled = false;
-            return;
+            loading.remove();
+            statusText.innerText = 'Erro na API';
         }
+    };
 
-        escutando = true;
-        btnStart.disabled = false;
-        btnStart.textContent = '■ Parar Escuta';
-        btnStart.classList.add('parar');
-        dot.classList.add('ativo');
-        log('🎙️ Escutando...');
-        iniciarVolumeMeter(mediaStream);
-        gravarCiclo();
+    function adicionarMensagem(user, text, color, isLoading = false) {
+        const div = document.createElement('div');
+        div.className = 'message' + (isLoading ? ' loading' : '');
+        div.innerHTML = `<span class="username" style="color:${color}">${user}:</span> ${text}`;
+        chatMsgs.appendChild(div);
+        chatMsgs.scrollTop = chatMsgs.scrollHeight;
+        return div;
     }
-}
 
-// ─── Helpers ───────────────────────────────────────────────────
-function adicionarMensagem(usuario, texto, cor = '#9146FF', isLoading = false) {
-    const div = document.createElement('div');
-    div.className = 'message' + (isLoading ? ' loading' : '');
-    div.innerHTML = `<span class="username" style="color:${cor}">${esc(usuario)}:</span> ${esc(texto)}`;
-    chatMsgs.appendChild(div);
-    chatMsgs.scrollTop = chatMsgs.scrollHeight;
-    while (chatMsgs.children.length > MAX_MSGS) chatMsgs.removeChild(chatMsgs.firstChild);
-    return div;
-}
-
-function esc(str) {
-    return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-}
-
-function gerarCor() {
-    const cores = ['#FF7F50','#9146FF','#00B5AD','#F7971E','#56CCF2','#FF6B9D','#43E97B','#FA709A','#4FACFE','#F093FB'];
-    return cores[Math.floor(Math.random() * cores.length)];
-}
+    function gerarCor() {
+        const cores = ['#FF7F50', '#00B5AD', '#56CCF2', '#43E97B'];
+        return cores[Math.floor(Math.random() * cores.length)];
+    }
 </script>
 </body>
 </html>

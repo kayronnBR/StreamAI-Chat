@@ -48,96 +48,84 @@
     </div>
 
     <script>
-        let GEMINI_API_KEY = localStorage.getItem('GEMINI_API_KEY');
-        const modal = document.getElementById('config-modal');
-        const statusText = document.getElementById('status');
-        const chatMessages = document.getElementById('chat-messages');
-        const btnStart = document.getElementById('btn-start');
+    let GEMINI_API_KEY = localStorage.getItem('GEMINI_API_KEY');
+    const modal = document.getElementById('config-modal');
+    const statusText = document.getElementById('status');
+    const chatMessages = document.getElementById('chat-messages');
+    const btnStart = document.getElementById('btn-start');
+    let userManualStop = false; 
 
-        // VARIÁVEL DE CONTROLE PARA O AUTO-RESTART
-        let userManualStop = false; 
+    if (GEMINI_API_KEY) modal.style.display = 'none';
 
-        if (GEMINI_API_KEY) modal.style.display = 'none';
-
-        function salvarAPI() {
-            const key = document.getElementById('api-input').value.trim();
-            if (key) {
-                localStorage.setItem('GEMINI_API_KEY', key);
-                location.reload();
-            }
+    function salvarAPI() {
+        const key = document.getElementById('api-input').value.trim();
+        if (key) {
+            localStorage.setItem('GEMINI_API_KEY', key);
+            location.reload();
         }
+    }
 
-        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-        const recognition = new SpeechRecognition();
-        recognition.continuous = true;
-        recognition.lang = 'pt-BR';
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    const recognition = new SpeechRecognition();
+    recognition.continuous = true;
+    recognition.lang = 'pt-BR'; // Mantenha pt-BR se fala em brasileiro
 
-        // --- LÓGICA DE AUTO-RESTART ---
-        recognition.onend = () => {
-            if (!userManualStop) {
-                // Se o navegador parou sozinho (silêncio/timeout), reinicia
-                recognition.start();
-            } else {
-                // Se o usuário clicou em parar, atualiza a UI
-                statusText.innerText = "Parado.";
-                btnStart.innerText = "Iniciar Escuta";
-                btnStart.style.backgroundColor = "#9146FF";
-            }
-        };
+    recognition.onstart = () => {
+        console.log("Sistema: Microfone ligado.");
+        statusText.innerText = "Escutando... 🎙️";
+    };
 
-        function iniciarEscuta() {
-            if (!GEMINI_API_KEY) {
-                alert("Configure a API primeiro!");
+    recognition.onend = () => {
+        if (!userManualStop) {
+            console.log("Sistema: Reiniciando escuta...");
+            recognition.start();
+        }
+    };
+
+    recognition.onresult = async (event) => {
+        const transcript = event.results[event.results.length - 1][0].transcript.trim();
+        console.log("Microfone detetou: ", transcript); // <--- DEBUG 1
+        
+        if (transcript.length > 3) {
+            await gerarReacaoChat(transcript);
+        } else {
+            console.log("Texto muito curto para a IA processar.");
+        }
+    };
+
+    async function gerarReacaoChat(texto) {
+        console.log("A enviar para a API:", texto); // <--- DEBUG 2
+        try {
+            const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ contents: [{ parts: [{ text: `Reaja a: "${texto}". Responda com 1 ou 2 frases curtas, estilo chat de Twitch. Formato: msg1 | msg2` }] }] })
+            });
+            
+            const data = await res.json();
+            console.log("Resposta recebida da API:", data); // <--- DEBUG 3
+            
+            if(data.error) {
+                console.error("Erro na API:", data.error.message);
+                statusText.innerText = "Erro na API: " + data.error.code;
                 return;
             }
 
-            // Verifica se já está escutando
-            if (btnStart.innerText === "Parar Escuta") {
-                userManualStop = true;
-                recognition.stop();
-            } else {
-                userManualStop = false;
-                recognition.start();
-                statusText.innerText = "Escutando... 🎙️";
-                btnStart.innerText = "Parar Escuta";
-                btnStart.style.backgroundColor = "#ff4500";
-            }
+            const resposta = data.candidates[0].content.parts[0].text;
+            const mensagens = resposta.split('|');
+            
+            mensagens.forEach(m => {
+                const div = document.createElement('div');
+                div.className = 'message';
+                div.innerHTML = `<span class="username" style="color: #FF7F50">Espectador:</span> ${m.trim()}`;
+                chatMessages.appendChild(div);
+                chatMessages.scrollTop = chatMessages.scrollHeight;
+            });
+        } catch (err) {
+            console.error("Erro fatal na comunicação:", err);
+            statusText.innerText = "Erro de conexão.";
         }
-
-        recognition.onresult = async (event) => {
-            // Pega o resultado mais recente
-            const transcript = event.results[event.results.length - 1][0].transcript.trim();
-            if (transcript.length > 3) {
-                await gerarReacaoChat(transcript);
-            }
-        };
-
-        async function gerarReacaoChat(texto) {
-            try {
-                const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ contents: [{ parts: [{ text: `Reaja a: "${texto}". Responda com 1 ou 2 frases curtas, estilo chat de Twitch. Formato: msg1 | msg2` }] }] })
-                });
-                
-                const data = await res.json();
-                const resposta = data.candidates[0].content.parts[0].text;
-                const mensagens = resposta.split('|');
-                
-                mensagens.forEach(m => {
-                    const div = document.createElement('div');
-                    div.className = 'message';
-                    const cores = ['#FF7F50', '#00FF7F', '#1E90FF', '#FF69B4'];
-                    const corAleatoria = cores[Math.floor(Math.random() * cores.length)];
-                    div.innerHTML = `<span class="username" style="color: ${corAleatoria}">Espectador:</span> ${m.trim()}`;
-                    chatMessages.appendChild(div);
-                    chatMessages.scrollTop = chatMessages.scrollHeight;
-                });
-            } catch (err) {
-                console.error("Erro na API:", err);
-                statusText.innerText = "Erro na API.";
-            }
-        }
-    </script>
+    }
+</script>
 </body>
 </html>

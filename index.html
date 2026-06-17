@@ -92,6 +92,8 @@
     const recognition = new SpeechRecognition();
     recognition.lang = 'pt-BR';
     recognition.continuous = true;
+    recognition.onstart = () => console.log("Reconhecimento iniciado!");
+    recognition.onerror = (event) => console.error("Erro de voz:", event.error);
     recognition.interimResults = false;
 
     const chatMsgs = document.getElementById('chat-messages');

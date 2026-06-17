@@ -165,12 +165,6 @@ function salvarAPI() {
 }
 
 // ─── Speech Recognition ───────────────────────────────────────
-// NOTA: Usamos continuous=false de propósito.
-// O Chrome tem um bug: com continuous=true, em páginas remotas (GitHub Pages),
-// ele dispara "network" em loop sempre que não há fala.
-// A solução é deixar cada sessão terminar naturalmente e criar um novo
-// objeto SpeechRecognition a cada ciclo — isso reseta o estado interno do Chrome.
-
 const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 
 if (!SpeechRecognition) {
@@ -178,34 +172,70 @@ if (!SpeechRecognition) {
     btnStart.disabled = true;
 }
 
-let recognition = null;
+let recognition    = null;
+let ultimoInterim  = ''; // guarda o texto parcial mais recente
+
+function log(msg) {
+    // Mostra no status E no console
+    console.log(msg);
+    statusText.innerText = msg;
+}
 
 function criarRecognition() {
     const r = new SpeechRecognition();
-    r.continuous      = false; // uma sessão por vez — evita o bug de network loop
+    r.continuous      = false;
     r.lang            = 'pt-BR';
-    r.interimResults  = false;
+    r.interimResults  = true;  // ← CRÍTICO: captura texto enquanto fala, antes do "network"
     r.maxAlternatives = 1;
 
     r.onstart = () => {
         reconhecendo = true;
-        statusText.innerText = '🎙️ Escutando...';
+        ultimoInterim = '';
+        log('🎙️ Escutando... (fale agora)');
     };
 
-    r.onresult = async (event) => {
-        const transcript = event.results[0][0].transcript.trim();
-        console.log('[Mic] Captou:', transcript);
-        if (transcript.length > 3 && !processando) {
-            await gerarReacaoChat(transcript);
+    r.onresult = (event) => {
+        let interimText = '';
+        let finalText   = '';
+
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+            const txt = event.results[i][0].transcript;
+            if (event.results[i].isFinal) {
+                finalText += txt;
+            } else {
+                interimText += txt;
+            }
+        }
+
+        // Mostra o que está sendo captado em tempo real
+        if (interimText) {
+            ultimoInterim = interimText;
+            log('🎙️ "' + interimText + '"');
+        }
+
+        // Texto final confirmado → envia para IA
+        if (finalText.trim().length > 3 && !processando) {
+            ultimoInterim = '';
+            log('✅ Captou: "' + finalText.trim() + '"');
+            gerarReacaoChat(finalText.trim());
         }
     };
 
     r.onerror = (event) => {
-        // Com continuous=false, "no-speech" e "network" são normais — ignora
+        console.warn('[Mic] Erro:', event.error);
+
+        // Se tínhamos texto parcial quando o erro veio, usa ele
+        if ((event.error === 'network' || event.error === 'no-speech') && ultimoInterim.trim().length > 3 && !processando) {
+            const textoSalvo = ultimoInterim.trim();
+            ultimoInterim = '';
+            log('⚡ Usando texto parcial: "' + textoSalvo + '"');
+            gerarReacaoChat(textoSalvo);
+            return;
+        }
+
         const normais = ['no-speech', 'network'];
         if (!normais.includes(event.error)) {
-            console.error('[Mic] Erro:', event.error);
-            statusText.innerText = '⚠️ Erro: ' + event.error;
+            log('⚠️ Erro: ' + event.error);
             pararEscuta();
         }
     };
@@ -213,13 +243,23 @@ function criarRecognition() {
     r.onend = () => {
         reconhecendo = false;
         if (!escutando) return;
-        // Aguarda 300ms e inicia uma nova sessão (novo objeto)
         restartTimer = setTimeout(() => {
-            if (escutando) {
+            if (escutando && !processando) {
                 recognition = criarRecognition();
-                try { recognition.start(); } catch(e) {}
+                try { recognition.start(); } catch(e) { log('⚠️ Erro ao reiniciar: ' + e.message); }
+            } else if (escutando && processando) {
+                // Aguarda a IA terminar antes de reiniciar o mic
+                const aguardar = setInterval(() => {
+                    if (!processando) {
+                        clearInterval(aguardar);
+                        if (escutando) {
+                            recognition = criarRecognition();
+                            try { recognition.start(); } catch(e) {}
+                        }
+                    }
+                }, 200);
             }
-        }, 300);
+        }, 400);
     };
 
     return r;
@@ -246,8 +286,10 @@ function toggleEscuta() {
         btnStart.textContent = '■ Parar Escuta';
         btnStart.classList.add('parar');
         recognition = criarRecognition();
-        try { recognition.start(); } catch(e) {
-            console.error('[Mic] Não foi possível iniciar:', e);
+        try {
+            recognition.start();
+        } catch(e) {
+            log('⚠️ Não foi possível iniciar: ' + e.message);
             pararEscuta();
         }
     }
